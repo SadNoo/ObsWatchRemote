@@ -19,6 +19,8 @@ final class OBSController: ObservableObject {
 
     private let client = OBSWebSocketClient()
     private let connectivity = PhoneConnectivity()
+    private let sleepAnalyzer = SleepAnalyzer()
+    private var lastSleepPush: Date?
     private var pollTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var wantsConnection = false
@@ -26,6 +28,8 @@ final class OBSController: ObservableObject {
 
     private static let pollInterval: Duration = .seconds(2)
     private static let reconnectDelay: Duration = .seconds(3)
+    /// CustomEvent 不会保留，定期重发，让之后才加载的网页叠加层也能拿到
+    private static let sleepRebroadcastInterval: TimeInterval = 60
 
     init() {
         settings = ConnectionSettings.load()
@@ -40,6 +44,7 @@ final class OBSController: ObservableObject {
         connectivity.activate()
 
         if settings.autoConnect { connect() }
+        Task { await refreshSleep(push: false) }
     }
 
     // MARK: - 连接
@@ -55,7 +60,7 @@ final class OBSController: ObservableObject {
         reconnectTask?.cancel()
         pollTask?.cancel()
         client.disconnect()
-        snapshot = ObsSnapshot(heartRateForwarding: snapshot.heartRateForwarding)
+        snapshot = ObsSnapshot(heartRateForwarding: snapshot.heartRateForwarding, sleep: snapshot.sleep)
     }
 
     private func establish() async {
@@ -71,6 +76,7 @@ final class OBSController: ObservableObject {
             snapshot.errorMessage = nil
             await refreshScenes()
             startPolling()
+            await pushSleep()
         } catch {
             snapshot.connection = .failed
             snapshot.errorMessage = error.localizedDescription
@@ -86,7 +92,8 @@ final class OBSController: ObservableObject {
         snapshot = ObsSnapshot(
             connection: .failed,
             errorMessage: "连接断开：\(error.localizedDescription)",
-            heartRateForwarding: snapshot.heartRateForwarding
+            heartRateForwarding: snapshot.heartRateForwarding,
+            sleep: snapshot.sleep
         )
         scheduleReconnect()
     }
@@ -149,6 +156,10 @@ final class OBSController: ObservableObject {
             s.isRecording = record["outputActive"] as? Bool ?? false
             s.updatedAt = now
             snapshot = s
+
+            if lastSleepPush.map({ now.timeIntervalSince($0) >= Self.sleepRebroadcastInterval }) ?? true {
+                await pushSleep(announce: false)
+            }
         } catch OBSError.notConnected {
             // 断线由 handleDisconnect 处理
         } catch {
@@ -193,9 +204,15 @@ final class OBSController: ObservableObject {
     // MARK: - 指令
 
     func perform(_ command: WatchCommand) {
-        if case let .setHeartRateForwarding(on) = command {
+        switch command {
+        case let .setHeartRateForwarding(on):
             snapshot.heartRateForwarding = on
             return
+        case .showSleep:
+            Task { await refreshSleep(push: true) }
+            return
+        default:
+            break
         }
         Task {
             do {
@@ -203,7 +220,7 @@ final class OBSController: ObservableObject {
                 case .toggleStream: try await client.request("ToggleStream")
                 case .toggleRecord: try await client.request("ToggleRecord")
                 case let .setScene(name): try await client.request("SetCurrentProgramScene", ["sceneName": name])
-                case .setHeartRateForwarding: break
+                case .setHeartRateForwarding, .showSleep: break
                 }
                 await poll()
             } catch {
@@ -235,6 +252,55 @@ final class OBSController: ObservableObject {
             } catch {
                 snapshot.errorMessage = "心率推送失败：\(error.localizedDescription)"
             }
+        }
+    }
+
+    // MARK: - 睡眠
+
+    /// 重新读取昨晚睡眠；push 为 true 时立即推送到 OBS。
+    func refreshSleep(push: Bool) async {
+        do {
+            snapshot.sleep = try await sleepAnalyzer.lastNight()
+            if snapshot.sleep == nil, push {
+                snapshot.errorMessage = "没有找到昨晚的睡眠记录（需要佩戴手表睡觉，并允许读取睡眠数据）"
+            }
+        } catch {
+            snapshot.errorMessage = "读取睡眠失败：\(error.localizedDescription)"
+        }
+        if push { await pushSleep() }
+    }
+
+    /// announce 为 true 表示主动展示（连接时、手动推送），叠加层会重新弹出；定期重发为 false。
+    private func pushSleep(announce: Bool = true) async {
+        guard settings.sleepEnabled, let sleep = snapshot.sleep, client.isIdentified else { return }
+        lastSleepPush = Date()
+        do {
+            let sourceName = settings.sleepSourceName.trimmingCharacters(in: .whitespaces)
+            if !sourceName.isEmpty {
+                try await client.request("SetInputSettings", [
+                    "inputName": sourceName,
+                    "inputSettings": ["text": settings.sleepText(sleep)],
+                    "overlay": true,
+                ])
+            }
+            // 给网页叠加层（overlay/sleep-status.html）用
+            try await client.request("BroadcastCustomEvent", [
+                "eventData": [
+                    "type": "sleep",
+                    "score": sleep.score,
+                    "level": sleep.level.rawValue,
+                    "label": sleep.level.label,
+                    "emoji": sleep.level.emoji,
+                    "asleepMinutes": Int(sleep.asleep / 60),
+                    "deepMinutes": Int(sleep.deep / 60),
+                    "remMinutes": Int(sleep.rem / 60),
+                    "efficiency": Int(sleep.efficiency * 100),
+                    "hasStages": sleep.hasStages,
+                    "announce": announce,
+                ],
+            ])
+        } catch {
+            snapshot.errorMessage = "睡眠状态推送失败：\(error.localizedDescription)"
         }
     }
 }

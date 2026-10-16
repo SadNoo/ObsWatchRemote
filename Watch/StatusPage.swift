@@ -26,6 +26,20 @@ struct StatusPage: View {
                     metric("FPS", String(format: "%.1f", s.activeFps), s.renderLevel)
                     metric("渲染跳帧", Format.percent(s.renderSkippedPercent, digits: 2), s.renderLevel)
                 }
+
+                if let sleep = s.sleep {
+                    Divider()
+                    HStack {
+                        Text("睡眠").foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(sleep.level.emoji) \(sleep.score) 分")
+                            .monospacedDigit()
+                            .foregroundStyle(sleep.level.color)
+                    }
+                    Text("\(Format.hoursMinutes(sleep.asleep)) · \(sleep.level.label)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, 4)
         }

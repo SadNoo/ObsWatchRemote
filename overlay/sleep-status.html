@@ -1,0 +1,99 @@
+<!doctype html>
+<!--
+  OBS 睡眠状态卡片：添加「浏览器」源，URL 填
+    file:///完整路径/overlay/sleep-status.html?password=你的密码&port=4455&show=30
+  宽 520、高 200，背景透明。
+  参数 show：卡片显示多少秒后淡出（开播、手动推送时会重新弹出）；0 或不填表示一直显示。
+-->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  #card {
+    --c: #34c759;
+    display: flex; align-items: center; gap: 22px;
+    margin: 12px; padding: 20px 26px; border-radius: 22px;
+    background: rgba(18, 18, 24, .78); color: #fff;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    box-shadow: 0 6px 24px rgba(0,0,0,.35);
+    opacity: 0; transform: translateY(16px); transition: opacity .6s, transform .6s;
+  }
+  #card.live { opacity: 1; transform: none; }
+  .ring { position: relative; width: 120px; height: 120px; flex: none; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 10; }
+  .ring .track { stroke: rgba(255,255,255,.15); }
+  .ring .bar { stroke: var(--c); stroke-linecap: round; stroke-dasharray: 314.16; stroke-dashoffset: 314.16; transition: stroke-dashoffset 1.2s ease; }
+  .ring .score { position: absolute; inset: 0; display: grid; place-items: center; font-size: 40px; font-weight: 800; }
+  .title { font-size: 34px; font-weight: 800; }
+  .sub { margin-top: 8px; font-size: 20px; opacity: .85; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div id="card">
+  <div class="ring">
+    <svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="50"/><circle class="bar" id="bar" cx="60" cy="60" r="50"/></svg>
+    <div class="score" id="score">--</div>
+  </div>
+  <div>
+    <div class="title" id="title">--</div>
+    <div class="sub" id="sub"></div>
+  </div>
+</div>
+<script>
+  const params = new URLSearchParams(location.search);
+  const PORT = params.get("port") || "4455";
+  const PASSWORD = params.get("password") || "";
+  const SHOW_SECONDS = Number(params.get("show") || 0);
+  const COLORS = { excellent: "#34c759", good: "#30d1c4", fair: "#ffcc00", poor: "#ff9500" };
+
+  const card = document.getElementById("card");
+  let hideTimer, shownOnce = false;
+
+  async function sha256Base64(text) {
+    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return btoa(String.fromCharCode(...new Uint8Array(hash)));
+  }
+
+  const hm = (m) => (m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}m` : `${m}m`);
+
+  function render(e) {
+    card.style.setProperty("--c", COLORS[e.level] || COLORS.good);
+    document.getElementById("score").textContent = e.score;
+    document.getElementById("title").textContent = `${e.emoji} 今日${e.label}`;
+    const parts = [`昨晚睡了 ${hm(e.asleepMinutes)}`];
+    if (e.hasStages) parts.push(`深睡 ${hm(e.deepMinutes)} · REM ${hm(e.remMinutes)}`);
+    document.getElementById("sub").innerHTML = parts.join("<br>");
+    document.getElementById("bar").style.strokeDashoffset = (314.16 * (1 - e.score / 100)).toFixed(1);
+
+    const shouldShow = SHOW_SECONDS <= 0 || e.announce || !shownOnce;
+    if (!shouldShow) return;
+    shownOnce = true;
+    card.classList.add("live");
+    clearTimeout(hideTimer);
+    if (SHOW_SECONDS > 0) hideTimer = setTimeout(() => card.classList.remove("live"), SHOW_SECONDS * 1000);
+  }
+
+  function connect() {
+    const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
+    ws.onmessage = async (msg) => {
+      const { op, d } = JSON.parse(msg.data);
+      if (op === 0) {
+        const identify = { rpcVersion: 1, eventSubscriptions: 1 }; // General，包含 CustomEvent
+        if (d.authentication) {
+          const secret = await sha256Base64(PASSWORD + d.authentication.salt);
+          identify.authentication = await sha256Base64(secret + d.authentication.challenge);
+        }
+        ws.send(JSON.stringify({ op: 1, d: identify }));
+      } else if (op === 5 && d.eventType === "CustomEvent" && d.eventData?.eventData?.type === "sleep") {
+        render(d.eventData.eventData);
+      }
+    };
+    ws.onclose = () => setTimeout(connect, 3000);
+  }
+
+  connect();
+</script>
+</body>
+</html>

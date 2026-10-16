@@ -35,6 +35,9 @@ struct ObsSnapshot: Codable, Equatable {
     // 心率
     var heartRateForwarding = false
 
+    // 昨晚睡眠（iPhone 从「健康」读取）
+    var sleep: SleepSummary?
+
     var updatedAt = Date()
 
     var droppedPercent: Double {
@@ -60,6 +63,8 @@ enum WatchCommand: Codable, Equatable {
     case toggleRecord
     case setScene(String)
     case setHeartRateForwarding(Bool)
+    /// 重新读取睡眠并推送到 OBS
+    case showSleep
 }
 
 /// WatchConnectivity 消息字典中使用的键。

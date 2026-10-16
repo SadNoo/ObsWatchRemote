@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var obs: OBSController
+    @Environment(\.scenePhase) private var scenePhase
     @State private var confirmStopStream = false
 
     private var s: ObsSnapshot { obs.snapshot }
@@ -16,12 +17,17 @@ struct ContentView: View {
                     controlSection
                 }
                 heartRateSection
+                sleepSection
                 optionsSection
             }
             .navigationTitle("OBS 遥控")
             .confirmationDialog("确定停止直播？", isPresented: $confirmStopStream, titleVisibility: .visible) {
                 Button("停止直播", role: .destructive) { obs.perform(.toggleStream) }
             }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // 早上醒来打开 App 时，健康数据可能刚同步完，重新读取一次
+            if phase == .active { Task { await obs.refreshSleep(push: true) } }
         }
     }
 
@@ -124,6 +130,42 @@ struct ContentView: View {
             Text("心率")
         } footer: {
             Text("在手表的「心率」页点开始即可。会更新 OBS 中同名文字源的内容（{bpm} 替换为数值），同时广播 CustomEvent 给网页叠加层。文字源名称留空则只广播事件。")
+        }
+    }
+
+    // MARK: - 睡眠
+
+    private var sleepSection: some View {
+        Section {
+            if let sleep = s.sleep {
+                HStack {
+                    Text("\(sleep.level.emoji) \(sleep.level.label)").font(.headline)
+                    Spacer()
+                    Text("\(sleep.score) 分").font(.title3.bold()).monospacedDigit()
+                }
+                row("睡眠时长", Format.hoursMinutes(sleep.asleep))
+                row("入睡 → 醒来", "\(sleep.bedtime.formatted(date: .omitted, time: .shortened)) → \(sleep.wakeTime.formatted(date: .omitted, time: .shortened))")
+                if sleep.hasStages {
+                    row("深睡", "\(Format.hoursMinutes(sleep.deep))（\(Format.percent(sleep.deepPercent, digits: 0))）")
+                    row("REM", "\(Format.hoursMinutes(sleep.rem))（\(Format.percent(sleep.remPercent, digits: 0))）")
+                }
+                row("睡眠效率", Format.percent(sleep.efficiency * 100, digits: 0))
+            } else {
+                Text("暂无昨晚的睡眠数据").foregroundStyle(.secondary)
+            }
+
+            Button("重新读取并推送到 OBS") {
+                Task { await obs.refreshSleep(push: true) }
+            }
+            Toggle("推送睡眠状态到 OBS", isOn: $obs.settings.sleepEnabled)
+            TextField("OBS 文字源名称", text: $obs.settings.sleepSourceName)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            TextField("显示格式", text: $obs.settings.sleepFormat, axis: .vertical)
+        } header: {
+            Text("昨晚睡眠")
+        } footer: {
+            Text("读取「健康」中昨天 18:00 以后的睡眠记录（需戴着手表睡觉）。评分为本 App 自定义：时长 50 分、深睡与 REM 占比 25 分、睡眠效率 25 分。格式占位符：{emoji} {label} {score} {duration} {deep} {rem}。")
         }
     }
 

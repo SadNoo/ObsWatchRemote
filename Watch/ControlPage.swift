@@ -23,6 +23,12 @@ struct ControlPage: View {
                     Label(s.isRecording ? "停止录制" : "开始录制",
                           systemImage: s.isRecording ? "stop.fill" : "record.circle")
                 }
+
+                Button {
+                    session.send(.showSleep)
+                } label: {
+                    Label("推送睡眠状态", systemImage: "bed.double.fill")
+                }
             }
 
             if !s.scenes.isEmpty {

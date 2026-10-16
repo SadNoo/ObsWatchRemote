@@ -12,6 +12,12 @@ struct ConnectionSettings: Codable, Equatable {
     /// {bpm} 会被替换为心率数值。
     var heartRateFormat = "❤️ {bpm}"
 
+    var sleepEnabled = true
+    /// OBS 中用于显示睡眠状态的文字源名称，留空则只广播 CustomEvent。
+    var sleepSourceName = "SleepStatus"
+    /// 可用占位符：{emoji} {label} {score} {duration} {deep} {rem}
+    var sleepFormat = "{emoji} 昨晚睡了 {duration} · 睡眠 {score} 分 · {label}"
+
     var url: URL? {
         let trimmed = host.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, (1...65535).contains(port) else { return nil }
@@ -20,6 +26,17 @@ struct ConnectionSettings: Codable, Equatable {
 
     func heartRateText(_ bpm: Int) -> String {
         heartRateFormat.replacingOccurrences(of: "{bpm}", with: String(bpm))
+    }
+
+    func sleepText(_ sleep: SleepSummary) -> String {
+        [
+            "{emoji}": sleep.level.emoji,
+            "{label}": sleep.level.label,
+            "{score}": String(sleep.score),
+            "{duration}": Format.hoursMinutes(sleep.asleep),
+            "{deep}": Format.hoursMinutes(sleep.deep),
+            "{rem}": Format.hoursMinutes(sleep.rem),
+        ].reduce(sleepFormat) { $0.replacingOccurrences(of: $1.key, with: $1.value) }
     }
 
     // 个人自用，简单存 UserDefaults；如需更安全可把 password 移到 Keychain。
