@@ -1,0 +1,81 @@
+<!doctype html>
+<!--
+  OBS 心率叠加层：在 OBS 中添加「浏览器」源，勾选「本地文件」选中本文件，
+  或使用 URL：file:///路径/heart-rate.html?password=你的密码&port=4455
+  宽 400、高 160，背景透明。它会连接本机 obs-websocket，接收 iPhone 广播的 CustomEvent。
+-->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  #hr {
+    display: flex; align-items: center; gap: 14px;
+    font: 700 72px/1 -apple-system, "PingFang SC", "Segoe UI", sans-serif;
+    color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,.6);
+    padding: 16px 24px; opacity: 0; transition: opacity .6s;
+  }
+  #hr.live { opacity: 1; }
+  #heart { width: 64px; height: 64px; fill: var(--c, #ff3b5c); animation: beat var(--p, 1s) infinite; }
+  #unit { font-size: 28px; opacity: .8; }
+  @keyframes beat { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.18); } 30% { transform: scale(1); } 45% { transform: scale(1.1); } }
+</style>
+</head>
+<body>
+<div id="hr">
+  <svg id="heart" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+  <span id="bpm">--</span><span id="unit">BPM</span>
+</div>
+<script>
+  const params = new URLSearchParams(location.search);
+  const PORT = params.get("port") || "4455";
+  const PASSWORD = params.get("password") || "";
+  const HIDE_AFTER_MS = 15000;
+
+  const el = document.getElementById("hr");
+  const bpmEl = document.getElementById("bpm");
+  let hideTimer;
+
+  async function sha256Base64(text) {
+    const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return btoa(String.fromCharCode(...new Uint8Array(hash)));
+  }
+
+  function colorFor(bpm) {
+    if (bpm >= 160) return "#ff2d2d";
+    if (bpm >= 130) return "#ff7a1a";
+    if (bpm >= 100) return "#ffc21a";
+    return "#ff3b5c";
+  }
+
+  function show(bpm) {
+    bpmEl.textContent = bpm;
+    el.style.setProperty("--p", (60 / Math.max(30, Math.min(bpm, 220))).toFixed(3) + "s");
+    el.style.setProperty("--c", colorFor(bpm));
+    el.classList.add("live");
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => el.classList.remove("live"), HIDE_AFTER_MS);
+  }
+
+  function connect() {
+    const ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
+    ws.onmessage = async (msg) => {
+      const { op, d } = JSON.parse(msg.data);
+      if (op === 0) {
+        const identify = { rpcVersion: 1, eventSubscriptions: 1 }; // General，包含 CustomEvent
+        if (d.authentication) {
+          const secret = await sha256Base64(PASSWORD + d.authentication.salt);
+          identify.authentication = await sha256Base64(secret + d.authentication.challenge);
+        }
+        ws.send(JSON.stringify({ op: 1, d: identify }));
+      } else if (op === 5 && d.eventType === "CustomEvent" && d.eventData?.eventData?.type === "heartRate") {
+        show(d.eventData.eventData.bpm);
+      }
+    };
+    ws.onclose = () => setTimeout(connect, 3000);
+  }
+
+  connect();
+</script>
+</body>
+</html>
