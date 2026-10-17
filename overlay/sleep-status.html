@@ -86,8 +86,8 @@
           identify.authentication = await sha256Base64(secret + d.authentication.challenge);
         }
         ws.send(JSON.stringify({ op: 1, d: identify }));
-      } else if (op === 5 && d.eventType === "CustomEvent" && d.eventData?.eventData?.type === "sleep") {
-        render(d.eventData.eventData);
+      } else if (op === 5 && d.eventType === "CustomEvent" && d.eventData?.type === "sleep") {
+        render(d.eventData);
       }
     };
     ws.onclose = () => setTimeout(connect, 3000);

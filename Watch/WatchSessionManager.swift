@@ -15,16 +15,27 @@ final class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
         WCSession.default.activate()
     }
 
+    /// 心率转发开关没送达时先记下，等 iPhone 重新可达后补发
+    private var pendingForwarding: WatchCommand?
+
     func send(_ command: WatchCommand) {
         guard let data = try? JSONEncoder().encode(command) else { return }
+        if case .setHeartRateForwarding = command { pendingForwarding = command }
         guard WCSession.default.isReachable else {
             lastError = "iPhone 不可达，请打开 iPhone 上的 OBS 遥控"
             return
         }
-        WCSession.default.sendMessage([MessageKey.command: data], replyHandler: nil) { error in
+        // 带 replyHandler：iPhone 收到后回一份最新状态，同时确认已送达
+        WCSession.default.sendMessage([MessageKey.command: data], replyHandler: { reply in
+            let snapshot = reply[MessageKey.snapshot] as? Data
+            Task { @MainActor in
+                if self.pendingForwarding == command { self.pendingForwarding = nil }
+                self.apply(snapshot)
+            }
+        }, errorHandler: { error in
             let message = error.localizedDescription
             Task { @MainActor in self.lastError = message }
-        }
+        })
     }
 
     func sendHeartRate(_ bpm: Int) {
@@ -62,7 +73,12 @@ final class WatchSessionManager: NSObject, ObservableObject, WCSessionDelegate {
         let reachable = session.isReachable
         Task { @MainActor in
             self.phoneReachable = reachable
-            if reachable { self.requestSnapshot() }
+            guard reachable else { return }
+            if let pending = self.pendingForwarding {
+                self.send(pending)
+            } else {
+                self.requestSnapshot()
+            }
         }
     }
 

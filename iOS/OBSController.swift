@@ -237,20 +237,29 @@ final class OBSController: ObservableObject {
         let sourceName = settings.heartRateSourceName.trimmingCharacters(in: .whitespaces)
         let text = settings.heartRateText(bpm)
         Task {
-            do {
-                if !sourceName.isEmpty {
+            // 两条路径互不影响：文字源写失败时，网页叠加层照样能收到心率
+            var failures: [String] = []
+            if !sourceName.isEmpty {
+                do {
                     try await client.request("SetInputSettings", [
                         "inputName": sourceName,
                         "inputSettings": ["text": text],
                         "overlay": true,
                     ])
+                } catch {
+                    failures.append("文字源「\(sourceName)」：\(error.localizedDescription)")
                 }
-                // 给网页叠加层（overlay/heart-rate.html）用
+            }
+            // 给网页叠加层（overlay/heart-rate.html）用
+            do {
                 try await client.request("BroadcastCustomEvent", [
                     "eventData": ["type": "heartRate", "bpm": bpm],
                 ])
             } catch {
-                snapshot.errorMessage = "心率推送失败：\(error.localizedDescription)"
+                failures.append("叠加层事件：\(error.localizedDescription)")
+            }
+            if !failures.isEmpty {
+                snapshot.errorMessage = "心率推送失败：" + failures.joined(separator: "；")
             }
         }
     }

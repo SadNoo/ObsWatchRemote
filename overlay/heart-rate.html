@@ -68,8 +68,8 @@
           identify.authentication = await sha256Base64(secret + d.authentication.challenge);
         }
         ws.send(JSON.stringify({ op: 1, d: identify }));
-      } else if (op === 5 && d.eventType === "CustomEvent" && d.eventData?.eventData?.type === "heartRate") {
-        show(d.eventData.eventData.bpm);
+      } else if (op === 5 && d.eventType === "CustomEvent" && d.eventData?.type === "heartRate") {
+        show(d.eventData.bpm);
       }
     };
     ws.onclose = () => setTimeout(connect, 3000);

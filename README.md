@@ -45,8 +45,10 @@ open ObsWatchRemote.xcodeproj
 
 1. OBS 28 以上 → 工具 → WebSocket 服务器设置 → 勾选「开启 WebSocket 服务器」，记下端口（默认 4455）和密码。
 2. iPhone 与电脑在同一局域网，App 里填电脑 IP、端口、密码，点连接。首次会弹「本地网络」权限，选允许。
-3. 心率文字（简单）：在 OBS 新建一个「文本」源，命名为 `HeartRate`（与 App 里的名称一致）。
-4. 心率动画（可选）：新建「浏览器」源 → 勾选「本地文件」选择 `overlay/heart-rate.html`；如果 WebSocket 有密码，改为不勾本地文件、URL 填
+3. 心率显示，下面两种方式二选一（也可以都用）：
+   - 文字：在 OBS 新建一个「文本」源，名称与 App 里的「心率源名称」一致（默认 `HeartRate`）。App 会直接改这个文本源的文字。
+   - 动画：用下面第 4 步的浏览器源。浏览器源**不要**填进 App 的「心率源名称」；只用动画时，把 App 里的「心率源名称」清空即可。
+4. 心率动画（可选）：新建「浏览器」源（名称随意，例如 `心率动画`） → 勾选「本地文件」选择 `overlay/heart-rate.html`；如果 WebSocket 有密码，改为不勾本地文件、URL 填
    `file:///完整路径/overlay/heart-rate.html?password=你的密码`。宽 400，高 160。
 
 5. 睡眠状态（可选）：
