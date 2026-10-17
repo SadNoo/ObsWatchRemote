@@ -2,7 +2,7 @@
 
 iOS + watchOS SwiftUI app that monitors/controls OBS via obs-websocket v5 and forwards Apple Watch heart rate to OBS. See README.md (Chinese) for the architecture.
 
-The code was written without a compiler; the first job on a Mac is to get both targets building cleanly.
+CI (`.github/workflows/build.yml`) builds both targets for the simulators on every push to main (Xcode 26.6 at the time of writing; 0 warnings) and checks the watch app is embedded at `ObsRemote.app/Watch/`. Nothing has been run on a real device yet.
 
 ## Build
 
