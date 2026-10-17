@@ -9,9 +9,9 @@ options:
 settings:
   base:
     # 改成你自己的反向域名，例如 com.yourname
-    BUNDLE_ID_PREFIX: com.example
+    BUNDLE_ID_PREFIX: com.sadnoo
     # 在 Xcode 里登录 Apple ID 后，把你的 Team ID 填在这里（或在 Xcode 的 Signing 页面选择）
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: J4XNRM2AH7
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "0.1.0"
