@@ -38,7 +38,7 @@ open ObsWatchRemote.xcodeproj
 ```
 
 1. 在 `project.yml` 里把 `BUNDLE_ID_PREFIX` 改成你自己的（例如 `com.yourname`），重新 `xcodegen generate`。
-2. Xcode → 两个 target 的 Signing & Capabilities → 选择你的 Team。
+2. 把 `Config/Signing.local.xcconfig.example` 复制为 `Config/Signing.local.xcconfig`，填上你的 Team ID（Xcode → Settings → Accounts 可查看），然后重新 `xcodegen generate`。这个文件已被 gitignore，不会提交。
 3. 选 `ObsRemote` scheme，目标选你的 iPhone，运行。手表 App 会随 iPhone App 一起安装（也可以在 iPhone 的「Watch」App 里手动安装）。
 
 ## OBS 设置

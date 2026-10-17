@@ -1,0 +1,4 @@
+// 签名配置。不要在这里写自己的 Team ID。
+// 复制 Signing.local.xcconfig.example 为 Signing.local.xcconfig（已被 gitignore），在里面填写 DEVELOPMENT_TEAM。
+DEVELOPMENT_TEAM =
+#include? "Signing.local.xcconfig"
