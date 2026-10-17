@@ -47,6 +47,20 @@ jobs:
           ls -R "$app" | grep -E "Watch|\.app" || true
           test -d "$app/Watch/ObsRemoteWatch.app"
 
+      - name: Report warnings as annotations
+        if: always()
+        run: |
+          echo "::notice title=Xcode::$(xcodebuild -version | tr '\n' ' ')"
+          cat ios.log watch.log 2>/dev/null | grep -E "^/.*\.swift:[0-9]+:[0-9]+: (warning|error):" | sort -u > issues.txt || true
+          echo "::notice title=Summary::$(grep -c ': warning:' issues.txt) warnings, $(grep -c ': error:' issues.txt) errors"
+          head -40 issues.txt | while IFS= read -r line; do
+            file=$(echo "$line" | cut -d: -f1 | sed "s#^$GITHUB_WORKSPACE/##")
+            ln=$(echo "$line" | cut -d: -f2)
+            kind=$(echo "$line" | cut -d: -f4 | tr -d ' ')
+            msg=$(echo "$line" | cut -d: -f5-)
+            echo "::$kind file=$file,line=$ln::$msg"
+          done
+
       - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
