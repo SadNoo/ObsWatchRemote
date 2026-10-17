@@ -1,0 +1,55 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks | grep -Ei "ios|watch"
+
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build iOS app (includes watch app)
+        run: |
+          set -o pipefail
+          xcodebuild -project ObsWatchRemote.xcodeproj -scheme ObsRemote \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee ios.log | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" ios.log
+
+      - name: Build watch app
+        if: always()
+        run: |
+          set -o pipefail
+          xcodebuild -project ObsWatchRemote.xcodeproj -scheme ObsRemoteWatch \
+            -destination 'generic/platform=watchOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee watch.log | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" watch.log
+
+      - name: Check watch app is embedded
+        run: |
+          app=$(find ~/Library/Developer/Xcode/DerivedData -path "*Debug-iphonesimulator/ObsRemote.app" -maxdepth 6 | head -1)
+          echo "iOS app: $app"
+          ls -R "$app" | grep -E "Watch|\.app" || true
+          test -d "$app/Watch/ObsRemoteWatch.app"
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: "*.log"
