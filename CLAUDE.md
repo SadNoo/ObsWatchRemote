@@ -28,3 +28,9 @@ Pipe through `| xcbeautify` or `| grep -E "error|warning: .*\.swift"` to keep ou
 
 - UI strings and code comments are in Simplified Chinese.
 - Keep the obs-websocket protocol code in `iOS/OBSWebSocketClient.swift`; the watch never talks to OBS directly (watchOS blocks low-level networking).
+
+## Fixing errors: three-attempt rule
+
+- For any single error (build, signing, install, runtime), make at most **3** fix attempts with the same approach.
+- After 3 failed attempts, stop and switch to a different approach (e.g. a different build setting, a different command, restructuring the code, or a workaround). Briefly state what was tried and why the new approach is different.
+- If 2 different approaches have both failed, stop and report to the user: the error, what was tried, and what you need from them. Do not keep looping on the same spot.
